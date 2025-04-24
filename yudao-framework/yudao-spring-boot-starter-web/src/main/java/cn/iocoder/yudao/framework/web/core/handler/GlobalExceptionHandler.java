@@ -36,6 +36,7 @@ import javax.servlet.http.HttpServletRequest;
 import javax.validation.ConstraintViolation;
 import javax.validation.ConstraintViolationException;
 import javax.validation.ValidationException;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -400,6 +401,31 @@ public class GlobalExceptionHandler {
                     "[IoT 物联网 yudao-module-iot - 表结构未导入][参考 https://doc.iocoder.cn/iot/build/ 开启]");
         }
         return null;
+    }
+
+    /**
+     * 处理客户端断开连接异常（Broken Pipe, Connection reset by peer） 
+     *
+     * 说明：这类异常不需要打印堆栈信息，因为是客户端自己端开连接，属于正常现象。
+     * 
+     * @param ex 异常
+     */
+    @ExceptionHandler({
+            IOException.class
+    })
+    public CommonResult<?> handleClientAbortException(Throwable ex) {
+        String message = ex.getMessage();
+        if (message != null && (message.contains("Broken pipe") 
+                || message.contains("Connection reset")
+                || message.contains("连接已重置"))) {
+            // 如果是客户端断开连接，记录简短日志后忽略异常
+            log.debug("[handleClientAbortException][客户端断开连接] {}", message);
+            // 返回给前端特定的错误码和信息
+            return null; // 直接返回null，不需要返回错误信息给客户端（因为客户端已经断开了）
+        }
+        // 否则，作为服务异常处理
+        log.error("[handleClientAbortException][IO异常]", ex);
+        return CommonResult.error(INTERNAL_SERVER_ERROR);
     }
 
 }

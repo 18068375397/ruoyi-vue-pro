@@ -13,6 +13,7 @@ import javax.servlet.ServletRequest;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.util.Map;
 
@@ -46,8 +47,40 @@ public class ServletUtils {
         // 设置 header 和 contentType
         response.setHeader("Content-Disposition", "attachment;filename=" + URLEncoder.encode(filename, "UTF-8"));
         response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
+        response.setHeader("Content-Length", String.valueOf(content.length));
+        // 设置缓冲区
+        response.setBufferSize(Math.min(content.length, 8192));
+        // 禁用缓存
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setHeader("Expires", "0");
+        
         // 输出附件
-        IoUtil.write(response.getOutputStream(), false, content);
+        OutputStream outputStream = null;
+        try {
+            outputStream = response.getOutputStream();
+            IoUtil.write(outputStream, false, content);
+            outputStream.flush();
+        } catch (IOException e) {
+            // 如果是客户端断开连接导致的IOException（比如Broken pipe），则忽略它
+            if (e.getMessage() != null && (
+                    e.getMessage().contains("Broken pipe") ||
+                    e.getMessage().contains("Connection reset") ||
+                    e.getMessage().contains("连接已重置"))) {
+                // 客户端断开连接，忽略异常
+                return;
+            }
+            // 其他IO异常则抛出
+            throw e;
+        } finally {
+            if (outputStream != null) {
+                try {
+                    outputStream.close();
+                } catch (IOException e) {
+                    // 忽略关闭时的异常
+                }
+            }
+        }
     }
 
     /**
